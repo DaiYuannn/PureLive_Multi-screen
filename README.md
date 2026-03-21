@@ -25,7 +25,7 @@
 
 最新版下载（Releases）：
 
-- https://github.com/DaiYuannn/PureLive_Multi-screen/releases
+- https://github.com/DaiYuannn/PureLive_Multi-screen/releases/tag/v2.0.14%2B25
 
 ### 1. 环境建议
 
