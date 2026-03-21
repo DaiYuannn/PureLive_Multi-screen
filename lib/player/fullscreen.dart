@@ -104,11 +104,29 @@ class WindowService {
     }
   }
 
-  Future<void> doEnterWindowFullScreen() async {
+  Future<void> doEnterWindowFullScreen({
+    bool enableEscListener = true,
+    VoidCallback? onEsc,
+  }) async {
     if (Platform.isWindows) {
       WinFullscreen.enterFullscreen();
-      final LivePlayController livePlayController = Get.find<LivePlayController>();
-      WinFullscreen.startEscListener(() => livePlayController.videoController.value!.toggleFullScreen());
+      if (!enableEscListener) {
+        WinFullscreen.stopEscListener();
+        return;
+      }
+
+      if (onEsc != null) {
+        WinFullscreen.startEscListener(onEsc);
+        return;
+      }
+
+      if (Get.isRegistered<LivePlayController>()) {
+        final LivePlayController livePlayController =
+            Get.find<LivePlayController>();
+        WinFullscreen.startEscListener(
+          () => livePlayController.videoController.value!.toggleFullScreen(),
+        );
+      }
       return;
     }
     if (Platform.isMacOS || Platform.isLinux) {

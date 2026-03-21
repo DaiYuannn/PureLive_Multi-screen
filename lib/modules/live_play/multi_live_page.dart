@@ -15,6 +15,13 @@ class _SimpleIntent extends Intent {
   final String action;
 }
 
+class _GridSpec {
+  const _GridSpec({required this.columns, required this.rows});
+
+  final int columns;
+  final int rows;
+}
+
 class MultiLivePage extends StatefulWidget {
   const MultiLivePage({super.key});
 
@@ -25,23 +32,23 @@ class MultiLivePage extends StatefulWidget {
 class _MultiLivePageState extends State<MultiLivePage> {
   final controller = Get.find<MultiLiveController>();
   final FocusNode _focusNode = FocusNode();
-  bool _showFullscreenExitButton = true;
-  Timer? _fullscreenExitButtonTimer;
+  bool _showFullscreenToolbar = true;
+  Timer? _fullscreenToolbarTimer;
 
-  void _pokeFullscreenExitButton() {
+  void _pokeFullscreenToolbar() {
     if (!mounted) {
       return;
     }
     setState(() {
-      _showFullscreenExitButton = true;
+      _showFullscreenToolbar = true;
     });
-    _fullscreenExitButtonTimer?.cancel();
-    _fullscreenExitButtonTimer = Timer(const Duration(seconds: 2), () {
+    _fullscreenToolbarTimer?.cancel();
+    _fullscreenToolbarTimer = Timer(const Duration(seconds: 2), () {
       if (!mounted) {
         return;
       }
       setState(() {
-        _showFullscreenExitButton = false;
+        _showFullscreenToolbar = false;
       });
     });
   }
@@ -56,11 +63,68 @@ class _MultiLivePageState extends State<MultiLivePage> {
     return 4;
   }
 
-  int _subColumnsByCount(int subCount) {
-    if (subCount <= 0) return 1;
-    if (subCount <= 2) return 2;
-    if (subCount <= 6) return 3;
-    return 4;
+  int _rowsBy(int count, int columns) {
+    return ((count + columns - 1) ~/ columns).clamp(1, 99);
+  }
+
+  _GridSpec _oneMainSubGridSpec(int totalCount) {
+    final subCount = (totalCount - 1).clamp(0, 99);
+    if (subCount <= 0) {
+      return const _GridSpec(columns: 1, rows: 1);
+    }
+    // 明确约束：4窗格时必须是一大三小且右侧纵向排列
+    if (subCount <= 3) {
+      return _GridSpec(columns: 1, rows: subCount);
+    }
+    if (subCount <= 6) {
+      return _GridSpec(columns: 2, rows: _rowsBy(subCount, 2));
+    }
+    if (subCount <= 10) {
+      return _GridSpec(columns: 3, rows: _rowsBy(subCount, 3));
+    }
+    return _GridSpec(columns: 4, rows: _rowsBy(subCount, 4));
+  }
+
+  _GridSpec _twoMainSubGridSpec(int totalCount) {
+    final subCount = (totalCount - 2).clamp(0, 99);
+    if (subCount <= 0) {
+      return const _GridSpec(columns: 1, rows: 1);
+    }
+    if (subCount == 1) {
+      return const _GridSpec(columns: 1, rows: 1);
+    }
+    if (subCount <= 4) {
+      return _GridSpec(columns: 2, rows: _rowsBy(subCount, 2));
+    }
+    if (subCount <= 9) {
+      return _GridSpec(columns: 3, rows: _rowsBy(subCount, 3));
+    }
+    return _GridSpec(columns: 4, rows: _rowsBy(subCount, 4));
+  }
+
+  double _estimateGridAspectRatio({
+    required int itemCount,
+    required int columns,
+    required double containerWidth,
+    required double containerHeight,
+    required double spacing,
+    double fallback = 16 / 9,
+  }) {
+    if (itemCount <= 0 || columns <= 0) {
+      return fallback;
+    }
+    final rows = _rowsBy(itemCount, columns);
+    final usableWidth = containerWidth - spacing * (columns - 1);
+    final usableHeight = containerHeight - spacing * (rows - 1);
+    if (usableWidth <= 0 || usableHeight <= 0) {
+      return fallback;
+    }
+    final tileW = usableWidth / columns;
+    final tileH = usableHeight / rows;
+    if (tileW <= 0 || tileH <= 0) {
+      return fallback;
+    }
+    return tileW / tileH;
   }
 
   List<LiveRoom> _availableRoomsToAdd() {
@@ -192,10 +256,8 @@ class _MultiLivePageState extends State<MultiLivePage> {
 
   Future<void> _showLayoutSheet(BuildContext context) async {
     final current = controller.layoutMode.value;
-    final currentMaxTiles = controller.maxTiles;
     final currentMainRatio = controller.mainRatio;
     int selected = current;
-    int maxTiles = currentMaxTiles;
     double mainRatio = currentMainRatio;
 
     await showModalBottomSheet<void>(
@@ -240,19 +302,13 @@ class _MultiLivePageState extends State<MultiLivePage> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 14),
-                    Text('同屏上限: $maxTiles'),
-                    Slider(
-                      value: maxTiles.toDouble(),
-                      min: 1,
-                      max: 16,
-                      divisions: 15,
-                      label: '$maxTiles',
-                      onChanged: (value) {
-                        setStateSheet(() => maxTiles = value.round());
-                      },
+                    const SizedBox(height: 8),
+                    Text(
+                      '布局数量自适应：会根据当前窗格数量自动选择副屏网格。\n4窗格(1主多副)固定为右侧3个竖排。',
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                     if (selected != 0) ...[
+                      const SizedBox(height: 12),
                       Text('主屏比例: ${(mainRatio * 100).round()}%'),
                       Slider(
                         value: mainRatio,
@@ -277,7 +333,6 @@ class _MultiLivePageState extends State<MultiLivePage> {
                         FilledButton(
                           onPressed: () {
                             controller.setLayoutMode(selected);
-                            controller.setMaxTiles(maxTiles);
                             controller.setMainRatio(mainRatio);
                             Navigator.of(context).pop();
                           },
@@ -360,8 +415,9 @@ class _MultiLivePageState extends State<MultiLivePage> {
   Widget _buildEqualGrid(int count) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        const spacing = 8.0;
-        const outerPadding = 8.0;
+        final bool isRealFullscreen = controller.isWindowFullscreen.value;
+        final spacing = isRealFullscreen ? 0.0 : 8.0;
+        final outerPadding = isRealFullscreen ? 0.0 : 8.0;
         final crossAxisCount = _equalColumns(count);
         final rows = (count / crossAxisCount).ceil();
 
@@ -378,7 +434,7 @@ class _MultiLivePageState extends State<MultiLivePage> {
             : (16 / 9);
 
         return GridView.builder(
-          padding: const EdgeInsets.all(outerPadding),
+          padding: EdgeInsets.all(outerPadding),
           itemCount: count,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: crossAxisCount,
@@ -407,12 +463,29 @@ class _MultiLivePageState extends State<MultiLivePage> {
       builder: (context, constraints) {
         final tiles = controller.tiles;
         final subCount = count - 1;
-        final subColumns = _subColumnsByCount(subCount);
+        final subSpec = _oneMainSubGridSpec(count);
         final mainFlex = (controller.mainRatio * 10).round().clamp(3, 7);
         final sideFlex = 10 - mainFlex;
 
+        final bool isRealFullscreen = controller.isWindowFullscreen.value;
+        final edgePadding = isRealFullscreen ? 0.0 : 8.0;
+        final splitGap = isRealFullscreen ? 0.0 : 8.0;
+        final contentWidth = constraints.maxWidth - edgePadding * 2;
+        final contentHeight = constraints.maxHeight - edgePadding * 2;
+        final sideWidth =
+            (contentWidth - splitGap) * (sideFlex / (mainFlex + sideFlex));
+        final sideHeight = contentHeight;
+        final sideRatio = _estimateGridAspectRatio(
+          itemCount: subCount,
+          columns: subSpec.columns,
+          containerWidth: sideWidth,
+          containerHeight: sideHeight,
+          spacing: splitGap,
+          fallback: 9 / 16,
+        );
+
         return Padding(
-          padding: const EdgeInsets.all(8),
+          padding: EdgeInsets.all(edgePadding),
           child: Row(
             children: [
               Expanded(
@@ -431,7 +504,7 @@ class _MultiLivePageState extends State<MultiLivePage> {
                     final delta = details.delta.dx / constraints.maxWidth;
                     controller.setMainRatio(controller.mainRatio + delta);
                   },
-                  child: const SizedBox(width: 8),
+                  child: SizedBox(width: splitGap),
                 ),
               ),
               Expanded(
@@ -439,10 +512,10 @@ class _MultiLivePageState extends State<MultiLivePage> {
                 child: GridView.builder(
                   itemCount: subCount,
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: subColumns,
-                    crossAxisSpacing: 8,
-                    mainAxisSpacing: 8,
-                    childAspectRatio: 1.2,
+                    crossAxisCount: subSpec.columns,
+                    crossAxisSpacing: splitGap,
+                    mainAxisSpacing: splitGap,
+                    childAspectRatio: sideRatio,
                   ),
                   itemBuilder: (context, index) {
                     final tile = tiles[index + 1];
@@ -473,12 +546,29 @@ class _MultiLivePageState extends State<MultiLivePage> {
       builder: (context, constraints) {
         final tiles = controller.tiles;
         final subCount = count - 2;
-        final subColumns = _subColumnsByCount(subCount);
+        final subSpec = _twoMainSubGridSpec(count);
 
         final mainHeightFlex = (controller.mainRatio * 10).round().clamp(3, 7);
         final subHeightFlex = 10 - mainHeightFlex;
+        final bool isRealFullscreen = controller.isWindowFullscreen.value;
+        final edgePadding = isRealFullscreen ? 0.0 : 8.0;
+        final splitGap = isRealFullscreen ? 0.0 : 8.0;
+        final contentWidth = constraints.maxWidth - edgePadding * 2;
+        final contentHeight = constraints.maxHeight - edgePadding * 2;
+        final subHeight =
+            (contentHeight - splitGap) *
+            (subHeightFlex / (mainHeightFlex + subHeightFlex));
+        final subRatio = _estimateGridAspectRatio(
+          itemCount: subCount,
+          columns: subSpec.columns,
+          containerWidth: contentWidth,
+          containerHeight: subHeight,
+          spacing: splitGap,
+          fallback: 16 / 9,
+        );
+
         return Padding(
-          padding: const EdgeInsets.all(8),
+          padding: EdgeInsets.all(edgePadding),
           child: Column(
             children: [
               Expanded(
@@ -492,7 +582,7 @@ class _MultiLivePageState extends State<MultiLivePage> {
                         isMainTile: true,
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    SizedBox(width: splitGap),
                     Expanded(
                       child: _MultiLiveTile(
                         tile: tiles[1],
@@ -511,7 +601,7 @@ class _MultiLivePageState extends State<MultiLivePage> {
                     final delta = details.delta.dy / constraints.maxHeight;
                     controller.setMainRatio(controller.mainRatio + delta);
                   },
-                  child: const SizedBox(height: 8),
+                  child: SizedBox(height: splitGap),
                 ),
               ),
               Expanded(
@@ -519,10 +609,10 @@ class _MultiLivePageState extends State<MultiLivePage> {
                 child: GridView.builder(
                   itemCount: subCount,
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: subColumns,
-                    crossAxisSpacing: 8,
-                    mainAxisSpacing: 8,
-                    childAspectRatio: 1.35,
+                    crossAxisCount: subSpec.columns,
+                    crossAxisSpacing: splitGap,
+                    mainAxisSpacing: splitGap,
+                    childAspectRatio: subRatio,
                   ),
                   itemBuilder: (context, index) {
                     final tile = tiles[index + 2];
@@ -596,12 +686,6 @@ class _MultiLivePageState extends State<MultiLivePage> {
       const SingleActivator(LogicalKeyboardKey.delete): const _SimpleIntent(
         'remove',
       ),
-      const SingleActivator(LogicalKeyboardKey.keyF): const _SimpleIntent(
-        'fullscreen',
-      ),
-      const SingleActivator(LogicalKeyboardKey.escape): const _SimpleIntent(
-        'escape',
-      ),
     };
   }
 
@@ -616,7 +700,7 @@ class _MultiLivePageState extends State<MultiLivePage> {
               if (controller.fullscreenTileId.value != tileId) {
                 controller.toggleFullscreenTile(tileId);
               }
-              _pokeFullscreenExitButton();
+              _pokeFullscreenToolbar();
             }
           }
           return null;
@@ -685,21 +769,6 @@ class _MultiLivePageState extends State<MultiLivePage> {
                 unawaited(_removeTileWithUndo(controller.activeTileId.value));
               }
               break;
-            case 'fullscreen':
-              if (controller.activeTileId.value.isNotEmpty) {
-                controller.toggleFullscreenTile(controller.activeTileId.value);
-                _pokeFullscreenExitButton();
-              }
-              break;
-            case 'escape':
-              if (controller.fullscreenTileId.value.isNotEmpty) {
-                controller.exitFullscreenTile();
-                break;
-              }
-              if (Navigator.of(context).canPop()) {
-                Navigator.of(context).pop();
-              }
-              break;
           }
           return null;
         },
@@ -707,7 +776,10 @@ class _MultiLivePageState extends State<MultiLivePage> {
     };
   }
 
-  Widget _buildToolBar(BuildContext context) {
+  Widget _buildToolBar(
+    BuildContext context, {
+    bool showExitFullscreenButton = false,
+  }) {
     return Obx(() {
       final queueCount = controller.queueService.rooms.length;
       return Container(
@@ -764,6 +836,25 @@ class _MultiLivePageState extends State<MultiLivePage> {
                 label: const Text('布局'),
               ),
               const SizedBox(width: 8),
+              FilledButton.tonalIcon(
+                onPressed: () async {
+                  if (controller.isWindowFullscreen.value) {
+                    await controller.exitRealFullscreen();
+                    return;
+                  }
+                  await controller.enterRealFullscreen();
+                  _pokeFullscreenToolbar();
+                },
+                icon: Icon(
+                  controller.isWindowFullscreen.value
+                      ? Icons.fullscreen_exit_rounded
+                      : Icons.fullscreen_rounded,
+                ),
+                label: Text(
+                  controller.isWindowFullscreen.value ? '退出全屏' : '真实全屏',
+                ),
+              ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 width: 190,
@@ -805,12 +896,14 @@ class _MultiLivePageState extends State<MultiLivePage> {
                   unawaited(controller.setAudioMode(selected.first));
                 },
               ),
-              const SizedBox(width: 8),
-              FilterChip(
-                selected: controller.isEditMode.value,
-                onSelected: (_) => controller.toggleEditMode(),
-                label: const Text('编辑模式'),
-              ),
+              if (showExitFullscreenButton) ...[
+                const SizedBox(width: 8),
+                FilledButton.tonalIcon(
+                  onPressed: () => controller.exitRealFullscreen(),
+                  icon: const Icon(Icons.close_fullscreen_rounded),
+                  label: const Text('取消全屏'),
+                ),
+              ],
             ],
           ),
         ),
@@ -828,9 +921,9 @@ class _MultiLivePageState extends State<MultiLivePage> {
           autofocus: true,
           focusNode: _focusNode,
           child: Obx(() {
-            final isFullscreen = controller.fullscreenTileId.value.isNotEmpty;
+            final isRealFullscreen = controller.isWindowFullscreen.value;
             return Scaffold(
-              appBar: isFullscreen
+              appBar: isRealFullscreen
                   ? null
                   : AppBar(
                       title: Text('同屏播放 (${controller.tiles.length})'),
@@ -876,13 +969,13 @@ class _MultiLivePageState extends State<MultiLivePage> {
                               _confirmDialog(
                                 title: '快捷键帮助',
                                 content:
-                                    '1-9 切焦点\nM 静音\nR 刷新\nDelete 删除(可撤销)\nF 全屏当前窗格\nEsc 退出全屏/返回',
+                                    '1-9 切焦点\nM 静音\nR 刷新\nDelete 删除(可撤销)\n真实全屏请使用顶部按钮进入与退出',
                               );
                             }
                             if (value == 'show_about') {
                               _confirmDialog(
                                 title: '同屏播放',
-                                content: '当前为单窗口多屏同播模式，支持队列添加、布局切换、拖拽重排和快捷键。',
+                                content: '当前为单窗口多屏同播模式，支持队列添加、布局切换、拖拽重排、真实全屏与快捷键。',
                               );
                             }
                           },
@@ -921,63 +1014,71 @@ class _MultiLivePageState extends State<MultiLivePage> {
                         ),
                       ],
                     ),
-              body: Column(
+              body: Stack(
                 children: [
-                  if (!isFullscreen) _buildToolBar(context),
-                  Expanded(
-                    child: Obx(() {
-                      if (controller.tiles.isEmpty) {
-                        return const Center(child: Text('暂无同屏房间'));
-                      }
-                      final fullscreenId = controller.fullscreenTileId.value;
-                      if (fullscreenId.isNotEmpty) {
-                        final fullscreenTile = controller.tiles
-                            .firstWhereOrNull(
-                              (item) => item.tileId == fullscreenId,
-                            );
-                        if (fullscreenTile != null) {
-                          return Listener(
-                            behavior: HitTestBehavior.translucent,
-                            onPointerMove: (_) => _pokeFullscreenExitButton(),
-                            child: Stack(
-                              children: [
-                                Positioned.fill(
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(8),
-                                    child: _MultiLiveTile(
-                                      tile: fullscreenTile,
-                                      controller: controller,
-                                      isMainTile: true,
-                                    ),
-                                  ),
+                  Column(
+                    children: [
+                      if (!isRealFullscreen) _buildToolBar(context),
+                      Expanded(
+                        child: Obx(() {
+                          if (controller.tiles.isEmpty) {
+                            return const Center(child: Text('暂无同屏房间'));
+                          }
+                          final fullscreenId = controller.fullscreenTileId.value;
+                          if (fullscreenId.isNotEmpty) {
+                            final fullscreenTile = controller.tiles
+                                .firstWhereOrNull(
+                                  (item) => item.tileId == fullscreenId,
+                                );
+                            if (fullscreenTile != null) {
+                              final tilePadding = isRealFullscreen ? 0.0 : 8.0;
+                              return Padding(
+                                padding: EdgeInsets.all(tilePadding),
+                                child: _MultiLiveTile(
+                                  tile: fullscreenTile,
+                                  controller: controller,
+                                  isMainTile: true,
                                 ),
-                                Positioned(
-                                  top: 14,
-                                  right: 14,
-                                  child: AnimatedOpacity(
-                                    opacity: _showFullscreenExitButton ? 1 : 0,
-                                    duration: const Duration(milliseconds: 220),
-                                    child: IgnorePointer(
-                                      ignoring: !_showFullscreenExitButton,
-                                      child: FloatingActionButton.small(
-                                        heroTag: 'multi_live_exit_fullscreen',
-                                        onPressed:
-                                            controller.exitFullscreenTile,
-                                        child: const Icon(
-                                          Icons.fullscreen_exit_rounded,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-                      }
-                      return _buildLayoutByMode(controller.tiles.length);
-                    }),
+                              );
+                            }
+                          }
+                          return _buildLayoutByMode(controller.tiles.length);
+                        }),
+                      ),
+                    ],
                   ),
+                  if (isRealFullscreen)
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: MouseRegion(
+                        onEnter: (_) => _pokeFullscreenToolbar(),
+                        child: const SizedBox(height: 16),
+                      ),
+                    ),
+                  if (isRealFullscreen)
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: AnimatedSlide(
+                        duration: const Duration(milliseconds: 200),
+                        offset: _showFullscreenToolbar
+                            ? Offset.zero
+                            : const Offset(0, -1),
+                        child: IgnorePointer(
+                          ignoring: !_showFullscreenToolbar,
+                          child: MouseRegion(
+                            onEnter: (_) => _pokeFullscreenToolbar(),
+                            child: _buildToolBar(
+                              context,
+                              showExitFullscreenButton: true,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             );
@@ -989,7 +1090,7 @@ class _MultiLivePageState extends State<MultiLivePage> {
 
   @override
   void dispose() {
-    _fullscreenExitButtonTimer?.cancel();
+    _fullscreenToolbarTimer?.cancel();
     _focusNode.dispose();
     super.dispose();
   }
@@ -1058,33 +1159,30 @@ class _MultiLiveTileState extends State<_MultiLiveTile> {
       final bool isActive = controller.activeTileId.value == tile.tileId;
       final status = tile.status.value;
 
-      Widget tileCard = _buildTileCard(context, isActive, status);
-      if (controller.isEditMode.value) {
-        tileCard = DragTarget<String>(
-          onWillAcceptWithDetails: (details) => details.data != tile.tileId,
-          onAcceptWithDetails: (details) {
-            controller.reorderTiles(details.data, tile.tileId);
-          },
-          builder: (context, candidates, rejected) => Draggable<String>(
-            data: tile.tileId,
-            feedback: SizedBox(
-              width: 220,
-              child: Material(
-                color: Colors.transparent,
-                child: _buildTileCard(
-                  context,
-                  isActive,
-                  status,
-                  showTopBar: false,
-                ),
+      final tileCard = _buildTileCard(context, isActive, status);
+      return DragTarget<String>(
+        onWillAcceptWithDetails: (details) => details.data != tile.tileId,
+        onAcceptWithDetails: (details) {
+          controller.reorderTiles(details.data, tile.tileId);
+        },
+        builder: (context, candidates, rejected) => Draggable<String>(
+          data: tile.tileId,
+          feedback: SizedBox(
+            width: 220,
+            child: Material(
+              color: Colors.transparent,
+              child: _buildTileCard(
+                context,
+                isActive,
+                status,
+                showTopBar: false,
               ),
             ),
-            childWhenDragging: Opacity(opacity: 0.35, child: tileCard),
-            child: tileCard,
           ),
-        );
-      }
-      return tileCard;
+          childWhenDragging: Opacity(opacity: 0.35, child: tileCard),
+          child: tileCard,
+        ),
+      );
     });
   }
 

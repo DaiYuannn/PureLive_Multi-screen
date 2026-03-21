@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 import 'package:get/get.dart';
 import 'package:pure_live/common/index.dart';
 import 'package:pure_live/core/site/huya_site.dart';
@@ -7,6 +8,7 @@ import 'package:pure_live/player/fijk_adapter.dart';
 import 'package:pure_live/player/media_kit_adapter.dart';
 import 'package:pure_live/player/video_player_adapter.dart';
 import 'package:pure_live/common/utils/hive_pref_util.dart';
+import 'package:pure_live/player/fullscreen.dart';
 import 'package:pure_live/player/unified_player_interface.dart';
 import 'package:pure_live/common/global/platform_utils.dart';
 
@@ -318,15 +320,43 @@ class MultiLiveController extends GetxController {
   final gridCount = 4.obs;
   final activeTileId = ''.obs;
   final layoutMode = 0.obs; // 0: equal, 1: one main, 2: two main
-  final isEditMode = false.obs;
+  final isWindowFullscreen = false.obs;
   final fullscreenTileId = ''.obs;
   final audioMode = MultiLiveAudioMode.focus.obs;
   final globalVolume = 1.0.obs;
 
+  // 当前固定为性能优先策略：更大的最小窗格尺寸，更保守的自动上限。
+  static const bool _preferPerformanceFirst = true;
+
   int get maxTiles {
-    final configured = settings.multiLiveMaxTiles.value.clamp(1, 16);
-    final systemLimit = PlatformUtils.isDesktop ? 16 : 4;
-    return configured > systemLimit ? systemLimit : configured;
+    final ui.FlutterView? view =
+        WidgetsBinding.instance.platformDispatcher.views.isNotEmpty
+        ? WidgetsBinding.instance.platformDispatcher.views.first
+        : null;
+    if (view == null) {
+      return PlatformUtils.isDesktop ? 16 : 4;
+    }
+
+    final logicalWidth = view.physicalSize.width / view.devicePixelRatio;
+    final logicalHeight = view.physicalSize.height / view.devicePixelRatio;
+
+    // 基于当前窗口尺寸估算可承载窗格数量，避免依赖手动配置。
+    // 性能优先：提高单窗格最小宽高，减少并发解码压力。
+    final minTileWidth = PlatformUtils.isDesktop
+      ? (_preferPerformanceFirst ? 420.0 : 320.0)
+      : (_preferPerformanceFirst ? 280.0 : 220.0);
+    final minTileHeight = PlatformUtils.isDesktop
+      ? (_preferPerformanceFirst ? 260.0 : 200.0)
+      : (_preferPerformanceFirst ? 190.0 : 150.0);
+
+    final columns = (logicalWidth / minTileWidth).floor().clamp(1, 4);
+    final rows = (logicalHeight / minTileHeight).floor().clamp(1, 4);
+    final autoDetected = (columns * rows).clamp(1, 16);
+
+    final hardLimit = PlatformUtils.isDesktop
+      ? (_preferPerformanceFirst ? 12 : 16)
+      : (_preferPerformanceFirst ? 6 : 9);
+    return autoDetected > hardLimit ? hardLimit : autoDetected;
   }
 
   double get mainRatio => settings.multiLiveMainRatio.value.clamp(0.3, 0.7);
@@ -695,10 +725,6 @@ class MultiLiveController extends GetxController {
     }
   }
 
-  void toggleEditMode() {
-    isEditMode.value = !isEditMode.value;
-  }
-
   void toggleFullscreenTile(String tileId) {
     if (fullscreenTileId.value == tileId) {
       fullscreenTileId.value = '';
@@ -709,6 +735,30 @@ class MultiLiveController extends GetxController {
 
   void exitFullscreenTile() {
     fullscreenTileId.value = '';
+  }
+
+  Future<void> enterRealFullscreen() async {
+    if (isWindowFullscreen.value) {
+      return;
+    }
+    await WindowService().doEnterWindowFullScreen(enableEscListener: false);
+    isWindowFullscreen.value = true;
+  }
+
+  Future<void> exitRealFullscreen() async {
+    if (!isWindowFullscreen.value) {
+      return;
+    }
+    await WindowService().doExitWindowFullScreen();
+    isWindowFullscreen.value = false;
+  }
+
+  Future<void> toggleRealFullscreen() async {
+    if (isWindowFullscreen.value) {
+      await exitRealFullscreen();
+    } else {
+      await enterRealFullscreen();
+    }
   }
 
   void setMainRatio(double ratio) {
@@ -766,11 +816,6 @@ class MultiLiveController extends GetxController {
     }
   }
 
-  void setMaxTiles(int value) {
-    settings.multiLiveMaxTiles.value = value.clamp(1, 16);
-    _syncGridCountWithTiles();
-  }
-
   void _syncGridCountWithTiles() {
     const options = <int>[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 16];
     final count = tiles.length;
@@ -783,6 +828,10 @@ class MultiLiveController extends GetxController {
 
   @override
   void onClose() {
+    if (isWindowFullscreen.value) {
+      unawaited(WindowService().doExitWindowFullScreen());
+      isWindowFullscreen.value = false;
+    }
     for (final tile in tiles) {
       unawaited(tile.dispose());
     }
