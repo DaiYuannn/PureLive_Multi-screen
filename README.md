@@ -1,6 +1,6 @@
 <h1 align="center">
   <br>
-  <img src="https://github.com/liuchuancong/pure_live/blob/master/assets/icons/icon.png" width="150"/>
+  <img src="assets/icons/icon.png" width="150"/>
   <br>
   纯粹直播（Pure Live）
   <br>
@@ -10,18 +10,22 @@
 <h4 align="center">A Third-party Live Stream Aggregator Built with Flutter</h4>
 
 <p align="center">
-  <img alt="License" src="https://img.shields.io/github/license/liuchuancong/pure_live?color=blue">
-  <img alt="Latest Release" src="https://img.shields.io/github/v/release/liuchuancong/pure_live">
-  <img alt="Stars" src="https://img.shields.io/github/stars/liuchuancong/pure_live?color=yellow">
+  <img alt="License" src="https://img.shields.io/github/license/DaiYuannn/PureLive_Multi-screen?color=blue">
+  <img alt="Latest Release" src="https://img.shields.io/github/v/release/DaiYuannn/PureLive_Multi-screen">
+  <img alt="Stars" src="https://img.shields.io/github/stars/DaiYuannn/PureLive_Multi-screen?color=yellow">
 </p>
 
-> ⚠️ **本软件仅用于个人学习与技术交流，请勿用于商业用途。下载后请于 24 小时内删除。**
+> ⚠️ **本项目仅用于学习与技术交流，请遵守当地法律法规与目标平台服务条款。**
 
 ---
 
-## 🪟 Windows 个人版快速开始（推荐）
+## 🪟 Windows 主线快速开始（推荐）
 
-当前仓库维护策略为：**Windows 桌面优先、个人自用优先**。
+当前仓库维护策略为：**Windows 主线优先，Android / Android TV 为辅**。
+
+最新版下载（Releases）：
+
+- https://github.com/DaiYuannn/PureLive_Multi-screen/releases
 
 ### 1. 环境建议
 
@@ -78,7 +82,7 @@ Windows 安装包制作与快速卸载说明：
 
 - 保留并标注上游项目来源与作者信息
 - 对新增/修改内容进行可追踪说明
-- 优先复用跨平台 Flutter 业务逻辑，平台差异层尽量收敛
+- 优先复用现有 Flutter 业务逻辑，平台差异层尽量收敛
 
 详细说明见：
 
@@ -91,7 +95,7 @@ Windows 安装包制作与快速卸载说明：
 - ✅ Windows 安装包流程打通（Inno EXE）
 - ✅ 安装向导支持创建桌面快捷方式（默认勾选）
 - ✅ 同屏播放主链路完成第一轮迭代（单窗口多分屏）
-- ✅ 已补回 Android / iOS / Linux / macOS 平台目录，恢复多平台开发能力
+- ✅ Android / Android TV 辅助链路恢复并进入持续适配
 - 🔄 Android / TV 同屏体验正在规划专项适配（性能档位 + 遥控器焦点）
 - ⏳ 真机专项验证与回归（Android 手机、Android TV）
 
@@ -114,7 +118,17 @@ Windows 安装包制作与快速卸载说明：
 长期（P2）：
 
 - Windows 真多窗口模式（主窗管理 + 子窗独立播放）
-- 跨平台一致的可观测日志与问题定位能力
+- Windows / Android / TV 一致的可观测日志与问题定位能力
+
+---
+
+## 🧭 平台支持状态
+
+| 平台 | 当前状态 | 说明 |
+|------|---------|------|
+| Windows | ✅ 主线稳定 | 当前优先维护与验证平台 |
+| Android | ✅ 可用 | 持续优化同屏性能与稳定性 |
+| Android TV | 🔄 适配中 | 重点完善遥控器焦点与交互体验 |
 
 ---
 
@@ -134,7 +148,7 @@ Windows 安装包制作与快速卸载说明：
 
 ## ✨ 核心功能
 
-- ✅ **多端支持**：Android / Android TV / Windows / macOS （iOS 待合作者支持）  
+- ✅ **多端支持**：Windows（主线）/ Android / Android TV（辅助）  
 - ✅ **多播放器切换**：内置 IJKPlayer 与 MPV Player（Android/TV）  
 - ✅ **自定义直播源**：通过 M3U/M3U8 导入网络或本地直播流  
 - ✅ **数据同步与备份**：支持 WebDAV 同步、本地导出/导入配置  
@@ -168,12 +182,20 @@ Windows 安装包制作与快速卸载说明：
 
 ---
 
+## 🤝 贡献方式
+
+- 欢迎通过 Issue 提交问题反馈或功能建议。
+- 欢迎通过 Pull Request 提交修复与改进。
+- 提交前建议先运行：`fvm flutter analyze`、`fvm flutter test`、`fvm dart format .`
+
+---
+
 ## 🔒 声明与合规
 
 - 本项目为 **非盈利性开源软件**，遵循 **[GNU AGPL-3.0 协议](LICENSE)**。  
 - **不提供任何 VIP 解锁、视频破解或盗链服务**。高清直播需您在对应平台拥有合法账号权限。  
 - 所有直播内容（视频、音频、图像等）**版权归属原平台所有**，本软件仅作技术聚合与转码展示。  
-- 若您认为本项目侵犯您的合法权益，请通过 [GitHub Issue](https://github.com/liuchuancong/pure_live/issues) 联系我们，我们将及时处理。
+- 若您认为本项目侵犯您的合法权益，请通过 [GitHub Issue](https://github.com/DaiYuannn/PureLive_Multi-screen/issues) 联系我们，我们将及时处理。
 - 上游继承、改动范围与归属声明见 [NOTICE.md](NOTICE.md)。
 
 ---
@@ -220,36 +242,3 @@ Windows 安装包制作与快速卸载说明：
 | 部分设备无法播放（黑屏/卡顿） | 尝试切换播放器（IJK ↔ MPV），或检查硬件解码支持 |
 
 > ⚠️ **华为设备兼容性**：因系统框架限制，部分华为机型可能存在卡顿，暂无优化方案，敬请谅解。
-
----
-
-## 🤝 参与开发
-
-- **主开发者**：[@liuchuancong](https://github.com/liuchuancong)  
-- **协助开发者**：[@RebornQ](https://github.com/RebornQ)
-
-> 📌 **欢迎贡献**！  
-> - 如发现 License 使用不当，请提交 Issue 或 Pull Request  
-> - 如有 macOS/iOS 打包能力，欢迎联系合作！
-
-### 代码参考
-- [dart_simple_live](https://github.com/xiaoyaocz/dart_simple_live)  
-- [pure_live (Jackiu1997)](https://github.com/Jackiu1997/pure_live)
-
----
-
-## 🌟 Star 趋势
-
-[![Stargazers over time](https://starchart.cc/liuchuancong/pure_live.svg)](https://starchart.cc/liuchuancong/pure_live)
-
----
-
-## ☕ 捐助支持
-
-如果您觉得本项目对您有帮助，欢迎扫码支持开发者一杯咖啡 ☕
-
-<p align="center">
-  <img src="https://github.com/liuchuancong/pure_live/blob/master/assets/images/wechat.png" width="250" alt="WeChat Donate">
-</p>
-
-> 您的支持是我持续维护的动力！感谢 ❤️
