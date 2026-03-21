@@ -1,0 +1,350 @@
+import 'dart:io';
+
+import 'package:get/get.dart';
+import 'package:pure_live/common/index.dart';
+
+class Utils {
+  static Future<void> _minimizeOrHideDesktopWindow() async {
+    // macOS 上更符合习惯的是最小化到 Dock；直接 hide 在没有托盘/菜单栏入口时
+    // 容易让用户误以为 App 退出。
+    if (Platform.isMacOS) {
+      await windowManager.minimize();
+    } else {
+      if (await windowManager.isPreventClose()) {
+        await windowManager.hide();
+      }
+    }
+  }
+
+  static Future<bool> showAlertDialog(
+    String content, {
+    String title = '',
+    String confirm = '',
+    String cancel = '',
+    bool selectable = false,
+    List<Widget>? actions,
+    bool barrierDismissible = true,
+  }) async {
+    var result = await Get.dialog<bool>(
+      AlertDialog(
+        title: Text(title),
+        content: Container(
+          constraints: const BoxConstraints(maxHeight: 400),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: selectable ? SelectableText(content) : Text(content),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: (() => Navigator.of(Get.context!).pop(false)),
+            child: Text(cancel.isEmpty ? "取消" : cancel),
+          ),
+          TextButton(
+            onPressed: (() => Navigator.of(Get.context!).pop(true)),
+            child: Text(confirm.isEmpty ? "确定" : confirm),
+          ),
+          ...?actions,
+        ],
+      ),
+      barrierDismissible: barrierDismissible,
+    );
+    return result ?? false;
+  }
+
+  /// 提示弹窗
+  /// - `content` 内容
+  /// - `title` 弹窗标题
+  /// - `confirm` 确认按钮内容，留空为确定
+  static Future<bool> showMessageDialog(
+    String content, {
+    String title = '',
+    String confirm = '',
+    bool selectable = false,
+  }) async {
+    var result = await Get.dialog(
+      AlertDialog(
+        title: Text(title),
+        content: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: selectable ? SelectableText(content) : Text(content),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(Get.context!).pop(true);
+            },
+            child: Text(confirm.isEmpty ? "确定" : confirm),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  static void showRightDialog({
+    required String title,
+    Function()? onDismiss,
+    required Widget child,
+    double width = 320,
+    bool useSystem = false,
+  }) {
+    SmartDialog.show(
+      alignment: Alignment.topRight,
+      animationBuilder: (controller, child, animationParam) {
+        //从右到左
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(controller.view),
+          child: child,
+        );
+      },
+      useSystem: useSystem,
+      maskColor: Colors.transparent,
+      animationTime: const Duration(milliseconds: 200),
+      builder: (context) => Container(
+        width: width + MediaQuery.of(context).padding.right,
+        padding: EdgeInsets.only(right: MediaQuery.of(context).padding.right),
+        decoration: BoxDecoration(
+          color: Get.theme.cardColor,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(4),
+            bottomLeft: Radius.circular(4),
+          ),
+        ),
+        child: SafeArea(
+          left: false,
+          right: false,
+          child: MediaQuery(
+            data: const MediaQueryData(padding: EdgeInsets.zero),
+            child: Column(
+              children: [
+                ListTile(
+                  visualDensity: VisualDensity.compact,
+                  contentPadding: EdgeInsets.zero,
+                  leading: IconButton(
+                    onPressed: () {
+                      SmartDialog.dismiss(
+                        status: SmartStatus.allCustom,
+                      ).then((value) => onDismiss?.call());
+                    },
+                    icon: const Icon(Icons.arrow_back),
+                  ),
+                  title: Text(title, style: Get.textTheme.titleMedium),
+                ),
+                Divider(height: 1, color: Colors.grey.withValues(alpha: .1)),
+                Expanded(child: child),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  static void hideRightDialog() {
+    SmartDialog.dismiss(status: SmartStatus.allCustom);
+  }
+
+  /// 文本编辑的弹窗
+  /// - `content` 编辑框默认的内容
+  /// - `title` 弹窗标题
+  /// - `confirm` 确认按钮内容
+  /// - `cancel` 取消按钮内容
+  static Future<String?> showEditTextDialog(
+    String content, {
+    String title = '',
+    String? hintText,
+    String confirm = '',
+    String cancel = '',
+  }) async {
+    final TextEditingController textEditingController = TextEditingController(
+      text: content,
+    );
+    var result = await Get.dialog(
+      AlertDialog(
+        title: Text(title),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: TextField(
+            controller: textEditingController,
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(),
+              //prefixText: title,
+              contentPadding: const EdgeInsets.all(12),
+              hintText: hintText ?? title,
+            ),
+            // style: TextStyle(
+            //     height: 1.0,
+            //     color: Get.isDarkMode ? Colors.white : Colors.black),
+            autofocus: true,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(Get.context!).pop();
+            },
+            child: const Text("取消"),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(Get.context!).pop(textEditingController.text);
+            },
+            child: const Text("确定"),
+          ),
+        ],
+      ),
+      // barrierColor:
+      //     Get.isDarkMode ? Colors.grey.withValues(alpha:.3) : Colors.black38,
+    );
+    return result;
+  }
+
+  static Future<T?> showOptionDialog<T>(
+    List<T> contents,
+    T value, {
+    String title = '',
+  }) async {
+    var result = await Get.dialog(
+      SimpleDialog(
+        title: Text(title),
+        children: [
+          RadioGroup<T>(
+            groupValue: value,
+            onChanged: (T? e) {
+              if (e != null) {
+                Navigator.of(Get.context!).pop(e);
+              }
+            },
+            child: Padding(
+              padding: const EdgeInsets.only(
+                top: 0,
+                bottom: 10,
+                left: 16,
+                right: 16,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: contents.map<Widget>((e) {
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Radio<T>(
+                        value: e,
+                        activeColor: Theme.of(Get.context!).colorScheme.primary,
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.of(Get.context!).pop(e);
+                        },
+                        child: Text(
+                          e.toString(),
+                          style: Theme.of(Get.context!).textTheme.bodyLarge,
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    return result;
+  }
+
+  static Future<bool> showExitDialog() async {
+    final settings = Get.find<SettingsService>();
+    final dontAsk = settings.dontAskExit.value;
+    final exitChoose = settings.exitChoose.value;
+    if (dontAsk) {
+      if (exitChoose == 'exit') {
+        if (await windowManager.isPreventClose()) {
+          await windowManager.setPreventClose(false);
+        }
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          exit(0);
+        });
+      } else if (exitChoose == 'minimize') {
+        await _minimizeOrHideDesktopWindow();
+        return true;
+      }
+    }
+    bool shouldNotAskAgain = false;
+    var result = await Get.dialog<bool>(
+      StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: Text('提示', style: Get.textTheme.titleLarge),
+            content: Container(
+              constraints: const BoxConstraints(maxHeight: 400),
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('确定要退出吗？', style: Get.textTheme.titleMedium),
+                      SizedBox(height: 12),
+                      const Divider(height: 1),
+                      CheckboxListTile(
+                        title: Text('不再询问', style: Get.textTheme.titleSmall),
+                        value: shouldNotAskAgain,
+                        onChanged: (bool? value) {
+                          setState(() {
+                            shouldNotAskAgain = value!;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            actionsAlignment: MainAxisAlignment.spaceBetween,
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  settings.dontAskExit.value = shouldNotAskAgain;
+                  settings.exitChoose.value = 'minimize';
+                  Navigator.of(context).pop();
+                  Future.delayed(const Duration(milliseconds: 200), () async {
+                    await _minimizeOrHideDesktopWindow();
+                  });
+                },
+                child: Text('最小化'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.redAccent,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () async {
+                  settings.dontAskExit.value = shouldNotAskAgain;
+                  settings.exitChoose.value = 'exit';
+                  Navigator.of(context).pop();
+                  if (await windowManager.isPreventClose()) {
+                    await windowManager.setPreventClose(false);
+                  }
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    exit(0);
+                  });
+                },
+                child: Text('退出'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    return result ?? false;
+  }
+}
