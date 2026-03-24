@@ -548,32 +548,32 @@ class _MultiLivePageState extends State<MultiLivePage> {
         final subCount = count - 2;
         final subSpec = _twoMainSubGridSpec(count);
 
-        final mainHeightFlex = (controller.mainRatio * 10).round().clamp(3, 7);
-        final subHeightFlex = 10 - mainHeightFlex;
+        final mainWidthFlex = (controller.mainRatio * 10).round().clamp(3, 7);
+        final sideWidthFlex = 10 - mainWidthFlex;
         final bool isRealFullscreen = controller.isWindowFullscreen.value;
         final edgePadding = isRealFullscreen ? 0.0 : 8.0;
         final splitGap = isRealFullscreen ? 0.0 : 8.0;
         final contentWidth = constraints.maxWidth - edgePadding * 2;
         final contentHeight = constraints.maxHeight - edgePadding * 2;
-        final subHeight =
-            (contentHeight - splitGap) *
-            (subHeightFlex / (mainHeightFlex + subHeightFlex));
+        final sideWidth =
+            (contentWidth - splitGap) *
+            (sideWidthFlex / (mainWidthFlex + sideWidthFlex));
         final subRatio = _estimateGridAspectRatio(
           itemCount: subCount,
           columns: subSpec.columns,
-          containerWidth: contentWidth,
-          containerHeight: subHeight,
+          containerWidth: sideWidth,
+          containerHeight: contentHeight,
           spacing: splitGap,
-          fallback: 16 / 9,
+          fallback: 9 / 16,
         );
 
         return Padding(
           padding: EdgeInsets.all(edgePadding),
-          child: Column(
+          child: Row(
             children: [
               Expanded(
-                flex: mainHeightFlex,
-                child: Row(
+                flex: mainWidthFlex,
+                child: Column(
                   children: [
                     Expanded(
                       child: _MultiLiveTile(
@@ -582,7 +582,7 @@ class _MultiLivePageState extends State<MultiLivePage> {
                         isMainTile: true,
                       ),
                     ),
-                    SizedBox(width: splitGap),
+                    SizedBox(height: splitGap),
                     Expanded(
                       child: _MultiLiveTile(
                         tile: tiles[1],
@@ -594,18 +594,18 @@ class _MultiLivePageState extends State<MultiLivePage> {
                 ),
               ),
               MouseRegion(
-                cursor: SystemMouseCursors.resizeRow,
+                cursor: SystemMouseCursors.resizeColumn,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onVerticalDragUpdate: (details) {
-                    final delta = details.delta.dy / constraints.maxHeight;
+                  onHorizontalDragUpdate: (details) {
+                    final delta = details.delta.dx / constraints.maxWidth;
                     controller.setMainRatio(controller.mainRatio + delta);
                   },
-                  child: SizedBox(height: splitGap),
+                  child: SizedBox(width: splitGap),
                 ),
               ),
               Expanded(
-                flex: subHeightFlex,
+                flex: sideWidthFlex,
                 child: GridView.builder(
                   itemCount: subCount,
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
