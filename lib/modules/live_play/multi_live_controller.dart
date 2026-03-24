@@ -319,7 +319,7 @@ class MultiLiveController extends GetxController {
   final tiles = <MultiLiveTileState>[].obs;
   final gridCount = 4.obs;
   final activeTileId = ''.obs;
-  final layoutMode = 0.obs; // 0: equal, 1: one main, 2: two main
+  final layoutMode = 0.obs; // 0: equal, 1: one main, 2: two main, 3: freeform
   final isWindowFullscreen = false.obs;
   final fullscreenTileId = ''.obs;
   final audioMode = MultiLiveAudioMode.focus.obs;
@@ -425,7 +425,7 @@ class MultiLiveController extends GetxController {
 
   void _restoreLayoutMode() {
     final cached = HivePrefUtil.getInt(_kLayoutModePrefKey);
-    if (cached != null && (cached == 0 || cached == 1 || cached == 2)) {
+    if (cached != null && cached >= 0 && cached <= 3) {
       layoutMode.value = cached;
     }
   }
@@ -718,7 +718,7 @@ class MultiLiveController extends GetxController {
   }
 
   void setLayoutMode(int mode, {bool persist = true}) {
-    if (mode < 0 || mode > 2) return;
+    if (mode < 0 || mode > 3) return;
     layoutMode.value = mode;
     if (persist) {
       HivePrefUtil.setInt(_kLayoutModePrefKey, mode);

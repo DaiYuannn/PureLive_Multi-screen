@@ -34,6 +34,11 @@ class _MultiLivePageState extends State<MultiLivePage> {
   final FocusNode _focusNode = FocusNode();
   bool _showFullscreenToolbar = true;
   Timer? _fullscreenToolbarTimer;
+  final Map<String, Rect> _freeformRects = <String, Rect>{};
+
+  static const double _kFreeformMinWidth = 220;
+  static const double _kFreeformMinHeight = 140;
+  static const double _kFreeformSnapThreshold = 14;
 
   void _pokeFullscreenToolbar() {
     if (!mounted) {
@@ -300,6 +305,11 @@ class _MultiLivePageState extends State<MultiLivePage> {
                           label: const Text('2主多副'),
                           onSelected: (_) => setStateSheet(() => selected = 2),
                         ),
+                        ChoiceChip(
+                          selected: selected == 3,
+                          label: const Text('自由排列'),
+                          onSelected: (_) => setStateSheet(() => selected = 3),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -307,7 +317,7 @@ class _MultiLivePageState extends State<MultiLivePage> {
                       '布局数量自适应：会根据当前窗格数量自动选择副屏网格。\n4窗格(1主多副)固定为右侧3个竖排。',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
-                    if (selected != 0) ...[
+                    if (selected == 1 || selected == 2) ...[
                       const SizedBox(height: 12),
                       Text('主屏比例: ${(mainRatio * 100).round()}%'),
                       Slider(
@@ -634,12 +644,338 @@ class _MultiLivePageState extends State<MultiLivePage> {
     );
   }
 
+  void _ensureFreeformRects() {
+    final tileIds = controller.tiles.map((item) => item.tileId).toSet();
+    _freeformRects.removeWhere((key, _) => !tileIds.contains(key));
+
+    final count = controller.tiles.length;
+    if (count <= 0) {
+      return;
+    }
+    final columns = _equalColumns(count);
+    final rows = _rowsBy(count, columns);
+    const gap = 0.02;
+    final cellW = (1 - gap * (columns + 1)) / columns;
+    final cellH = (1 - gap * (rows + 1)) / rows;
+
+    for (int i = 0; i < controller.tiles.length; i++) {
+      final tileId = controller.tiles[i].tileId;
+      if (_freeformRects.containsKey(tileId)) {
+        continue;
+      }
+      final row = i ~/ columns;
+      final col = i % columns;
+      final left = gap + col * (cellW + gap);
+      final top = gap + row * (cellH + gap);
+      _freeformRects[tileId] = Rect.fromLTWH(left, top, cellW, cellH);
+    }
+  }
+
+  Rect _toAbsoluteRect(Rect normalized, Size canvasSize) {
+    return Rect.fromLTWH(
+      normalized.left * canvasSize.width,
+      normalized.top * canvasSize.height,
+      normalized.width * canvasSize.width,
+      normalized.height * canvasSize.height,
+    );
+  }
+
+  Rect _toNormalizedRect(Rect absolute, Size canvasSize) {
+    return Rect.fromLTWH(
+      absolute.left / canvasSize.width,
+      absolute.top / canvasSize.height,
+      absolute.width / canvasSize.width,
+      absolute.height / canvasSize.height,
+    );
+  }
+
+  double _snapToTargets(double value, List<double> targets, double threshold) {
+    var best = value;
+    var bestDist = threshold + 1;
+    for (final target in targets) {
+      final dist = (value - target).abs();
+      if (dist <= threshold && dist < bestDist) {
+        best = target;
+        bestDist = dist;
+      }
+    }
+    return best;
+  }
+
+  Rect _snapMoveRect(Rect movingRect, String tileId, Size canvasSize) {
+    final targetsX = <double>[0, canvasSize.width - movingRect.width];
+    final targetsY = <double>[0, canvasSize.height - movingRect.height];
+
+    for (final tile in controller.tiles) {
+      if (tile.tileId == tileId) {
+        continue;
+      }
+      final normalized = _freeformRects[tile.tileId];
+      if (normalized == null) {
+        continue;
+      }
+      final other = _toAbsoluteRect(normalized, canvasSize);
+      targetsX
+        ..add(other.left)
+        ..add(other.right)
+        ..add(other.left - movingRect.width)
+        ..add(other.right - movingRect.width);
+      targetsY
+        ..add(other.top)
+        ..add(other.bottom)
+        ..add(other.top - movingRect.height)
+        ..add(other.bottom - movingRect.height);
+    }
+
+    final snappedLeft = _snapToTargets(
+      movingRect.left,
+      targetsX,
+      _kFreeformSnapThreshold,
+    ).clamp(0.0, canvasSize.width - movingRect.width);
+    final snappedTop = _snapToTargets(
+      movingRect.top,
+      targetsY,
+      _kFreeformSnapThreshold,
+    ).clamp(0.0, canvasSize.height - movingRect.height);
+
+    return Rect.fromLTWH(
+      snappedLeft,
+      snappedTop,
+      movingRect.width,
+      movingRect.height,
+    );
+  }
+
+  Rect _snapResizeRect(
+    Rect baseRect,
+    String tileId,
+    Size canvasSize,
+    double minWidth,
+    double minHeight,
+  ) {
+    final targetsRight = <double>[canvasSize.width];
+    final targetsBottom = <double>[canvasSize.height];
+
+    for (final tile in controller.tiles) {
+      if (tile.tileId == tileId) {
+        continue;
+      }
+      final normalized = _freeformRects[tile.tileId];
+      if (normalized == null) {
+        continue;
+      }
+      final other = _toAbsoluteRect(normalized, canvasSize);
+      targetsRight
+        ..add(other.left)
+        ..add(other.right);
+      targetsBottom
+        ..add(other.top)
+        ..add(other.bottom);
+    }
+
+    final snappedRight = _snapToTargets(
+      baseRect.right,
+      targetsRight,
+      _kFreeformSnapThreshold,
+    ).clamp(baseRect.left + minWidth, canvasSize.width);
+    final snappedBottom = _snapToTargets(
+      baseRect.bottom,
+      targetsBottom,
+      _kFreeformSnapThreshold,
+    ).clamp(baseRect.top + minHeight, canvasSize.height);
+
+    return Rect.fromLTRB(
+      baseRect.left,
+      baseRect.top,
+      snappedRight,
+      snappedBottom,
+    );
+  }
+
+  Widget _buildFreeformLayout(int count) {
+    if (count <= 0) {
+      return const SizedBox.shrink();
+    }
+
+    final bool isRealFullscreen = controller.isWindowFullscreen.value;
+    final edgePadding = isRealFullscreen ? 0.0 : 8.0;
+
+    return Padding(
+      padding: EdgeInsets.all(edgePadding),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final canvasSize = Size(constraints.maxWidth, constraints.maxHeight);
+          if (canvasSize.width <= 0 || canvasSize.height <= 0) {
+            return const SizedBox.shrink();
+          }
+
+          _ensureFreeformRects();
+
+          final minWidth = _kFreeformMinWidth.clamp(120.0, canvasSize.width);
+          final minHeight = _kFreeformMinHeight.clamp(90.0, canvasSize.height);
+
+          final renderTiles = controller.tiles.toList();
+          final activeId = controller.activeTileId.value;
+          if (activeId.isNotEmpty) {
+            final activeIndex = renderTiles.indexWhere(
+              (item) => item.tileId == activeId,
+            );
+            if (activeIndex >= 0) {
+              final activeTile = renderTiles.removeAt(activeIndex);
+              renderTiles.add(activeTile);
+            }
+          }
+
+          return Stack(
+            children: [
+              for (final tile in renderTiles)
+                Builder(
+                  builder: (context) {
+                    final normalized = _freeformRects[tile.tileId];
+                    if (normalized == null) {
+                      return const SizedBox.shrink();
+                    }
+                    final rect = _toAbsoluteRect(normalized, canvasSize);
+                    return Positioned(
+                      left: rect.left,
+                      top: rect.top,
+                      width: rect.width,
+                      height: rect.height,
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: _MultiLiveTile(
+                              tile: tile,
+                              controller: controller,
+                              isMainTile: false,
+                              enableReorder: false,
+                              onTileTap: () async {
+                                await controller.focusTile(tile.tileId);
+                              },
+                            ),
+                          ),
+                          Positioned(
+                            top: 8,
+                            left: 8,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onPanStart: (_) {
+                                unawaited(controller.focusTile(tile.tileId));
+                              },
+                              onPanUpdate: (details) {
+                                final current = _toAbsoluteRect(
+                                  _freeformRects[tile.tileId]!,
+                                  canvasSize,
+                                );
+                                final moved = current.shift(details.delta);
+                                final clamped = Rect.fromLTWH(
+                                  moved.left.clamp(
+                                    0.0,
+                                    canvasSize.width - moved.width,
+                                  ),
+                                  moved.top.clamp(
+                                    0.0,
+                                    canvasSize.height - moved.height,
+                                  ),
+                                  moved.width,
+                                  moved.height,
+                                );
+                                final snapped = _snapMoveRect(
+                                  clamped,
+                                  tile.tileId,
+                                  canvasSize,
+                                );
+                                setState(() {
+                                  _freeformRects[tile.tileId] =
+                                      _toNormalizedRect(snapped, canvasSize);
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.45),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(
+                                  Icons.open_with_rounded,
+                                  size: 16,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            right: 8,
+                            bottom: 8,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onPanStart: (_) {
+                                unawaited(controller.focusTile(tile.tileId));
+                              },
+                              onPanUpdate: (details) {
+                                final current = _toAbsoluteRect(
+                                  _freeformRects[tile.tileId]!,
+                                  canvasSize,
+                                );
+                                final resized = Rect.fromLTRB(
+                                  current.left,
+                                  current.top,
+                                  (current.right + details.delta.dx).clamp(
+                                    current.left + minWidth,
+                                    canvasSize.width,
+                                  ),
+                                  (current.bottom + details.delta.dy).clamp(
+                                    current.top + minHeight,
+                                    canvasSize.height,
+                                  ),
+                                );
+                                final snapped = _snapResizeRect(
+                                  resized,
+                                  tile.tileId,
+                                  canvasSize,
+                                  minWidth,
+                                  minHeight,
+                                );
+                                setState(() {
+                                  _freeformRects[tile.tileId] =
+                                      _toNormalizedRect(snapped, canvasSize);
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.45),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(
+                                  Icons.north_west_rounded,
+                                  size: 16,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildLayoutByMode(int count) {
     if (controller.layoutMode.value == 1) {
       return _buildOneMainLayout(count);
     }
     if (controller.layoutMode.value == 2) {
       return _buildTwoMainLayout(count);
+    }
+    if (controller.layoutMode.value == 3) {
+      return _buildFreeformLayout(count);
     }
     return _buildEqualGrid(count);
   }
@@ -1102,12 +1438,14 @@ class _MultiLiveTile extends StatefulWidget {
     required this.controller,
     this.isMainTile = false,
     this.onTileTap,
+    this.enableReorder = true,
   });
 
   final MultiLiveTileState tile;
   final MultiLiveController controller;
   final bool isMainTile;
   final Future<void> Function()? onTileTap;
+  final bool enableReorder;
 
   @override
   State<_MultiLiveTile> createState() => _MultiLiveTileState();
@@ -1160,6 +1498,9 @@ class _MultiLiveTileState extends State<_MultiLiveTile> {
       final status = tile.status.value;
 
       final tileCard = _buildTileCard(context, isActive, status);
+      if (!widget.enableReorder) {
+        return tileCard;
+      }
       return DragTarget<String>(
         onWillAcceptWithDetails: (details) => details.data != tile.tileId,
         onAcceptWithDetails: (details) {
