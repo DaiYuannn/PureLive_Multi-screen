@@ -25,7 +25,7 @@
 
 最新版下载（Releases）：
 
-- https://github.com/DaiYuannn/PureLive_Multi-screen/releases/tag/v2.0.14%2B25-multilive-20260322
+- https://github.com/DaiYuannn/PureLive_Multi-screen/releases/tag/v2.0.14%2B25-multilive-20260325
 
 ### 1. 环境建议
 
@@ -90,11 +90,12 @@ Windows 安装包制作与快速卸载说明：
 
 ---
 
-## 🚧 当前任务进度（2026-03-21）
+## 🚧 当前任务进度（2026-03-25）
 
 - ✅ Windows 安装包流程打通（Inno EXE）
 - ✅ 安装向导支持创建桌面快捷方式（默认勾选）
 - ✅ 同屏播放主链路完成第一轮迭代（单窗口多分屏）
+- ✅ 同屏新增“2主多副（左侧双主纵向）”与“自由布局（拖拽+缩放+吸附）”
 - ✅ Android / Android TV 辅助链路恢复并进入持续适配
 - 🔄 Android / TV 同屏体验正在规划专项适配（性能档位 + 遥控器焦点）
 - ⏳ 真机专项验证与回归（Android 手机、Android TV）
